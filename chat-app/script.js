@@ -1,9 +1,9 @@
 const socket = io();
 const form = document.getElementById('form');
 const input = document.getElementById('input');
-const messages = document.getElementById('messages');
+const messagesContainer = document.getElementById('messages');
 
-const username = prompt("Enter your username") || "Anonymous";
+const username = prompt('Enter your username') || 'Anonymous';
 
 function addMessage(msg) {
   const item = document.createElement('div');
@@ -15,22 +15,26 @@ function addMessage(msg) {
     <div class="text">${msg.text}</div>
   `;
 
-  messages.appendChild(item);
-  messages.scrollTop = messages.scrollHeight;
+  messagesContainer.appendChild(item);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-socket.on('load messages', function(savedMessages) {
-  messages.innerHTML = '';
+socket.on('load messages', (savedMessages) => {
+  messagesContainer.innerHTML = '';
   savedMessages.forEach(addMessage);
 });
 
-form.addEventListener('submit', function(e) {
+socket.on('chat message', (msg) => {
+  addMessage(msg);
+});
+
+form.addEventListener('submit', (e) => {
   e.preventDefault();
 
-  if (input.value.trim()) {
+  if (input.value.trim() !== '') {
     const msg = {
-      username,
-      text: input.value,
+      username: username,
+      text: input.value.trim(),
       time: new Date().toLocaleTimeString()
     };
 
@@ -38,5 +42,3 @@ form.addEventListener('submit', function(e) {
     input.value = '';
   }
 });
-
-socket.on('chat message', addMessage);

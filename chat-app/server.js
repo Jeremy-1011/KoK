@@ -11,41 +11,39 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 const MESSAGES_FILE = path.join(__dirname, 'messages.json');
 
-// Serve public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Load saved messages
 let messages = [];
 
-if (fs.existsSync(MESSAGES_FILE)) {
-  try {
+try {
+  if (fs.existsSync(MESSAGES_FILE)) {
     const data = fs.readFileSync(MESSAGES_FILE, 'utf8');
-    messages = JSON.parse(data);
-  } catch (error) {
-    console.error('Error reading messages.json:', error);
-    messages = [];
+    messages = JSON.parse(data || '[]');
+  } else {
+    fs.writeFileSync(MESSAGES_FILE, '[]');
   }
+} catch (err) {
+  console.error('Error loading messages:', err);
+  messages = [];
 }
 
-// Save messages function
 function saveMessages() {
   try {
     fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2));
-  } catch (error) {
-    console.error('Error saving messages:', error);
+    console.log('Messages saved');
+  } catch (err) {
+    console.error('Error saving messages:', err);
   }
 }
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // Send old messages to the person who just joined
   socket.emit('load messages', messages);
 
   socket.on('chat message', (msg) => {
     messages.push(msg);
 
-    // Optional: keep only last 100 messages
     if (messages.length > 100) {
       messages = messages.slice(-100);
     }
