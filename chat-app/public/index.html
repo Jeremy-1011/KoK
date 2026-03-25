@@ -42,6 +42,7 @@
         const val = document.getElementById('username').value.trim();
         if (!val) return;
         username = val;
+        socket.emit('User Joined',username);
         document.getElementById('login').style.display = 'none';
         document.getElementById('chat').style.display = 'block';
       }

@@ -19,6 +19,14 @@ io.on('connection', (socket) => {
     socket.emit('chat message', msg);
   });
 
+socket.on('user joined', (username) => {
+  io.emit('chat message', {
+    username: 'system',
+    text: username + ' has joined the chat',
+    time: new Date().toLocaleTimeString()
+  })
+})
+
   socket.on('chat message', (msg) => {
     messages.push(msg);
     io.emit('chat message', msg);
