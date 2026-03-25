@@ -1,38 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Chat App</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>Discord-like Chat</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-
 <div class="app">
 
-  <!-- Sidebar -->
   <div class="sidebar">
     <h2>Chat App</h2>
-    <div class="channels">
+    <div id="channels" class="channels">
       <div class="channel active" data-channel="general"># general</div>
-      <div class="channel" data-channel="gaming"># gaming</div>
-      <div class="channel" data-channel="tech"># tech</div>
     </div>
+    <button id="addChannel">Add Channel</button>
+    <button id="deleteChannel">Delete Channel</button>
+    <input type="file" id="pfpInput" />
   </div>
 
-  <!-- Main chat -->
   <div class="chat-container">
-
-    <div class="chat-header">
-      # general
-    </div>
-
+    <div class="chat-header"># general</div>
     <div id="messages" class="messages"></div>
-
     <form id="form" class="input-area">
       <input id="input" autocomplete="off" placeholder="Message #general" />
       <button>Send</button>
     </form>
-
   </div>
 
 </div>
