@@ -9,47 +9,65 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
-const MESSAGES_FILE = path.join(__dirname, 'messages.json');
+const DATA_DIR = path.join(__dirname, 'channel_data');
 
+// Ensure channel data directory exists
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+
+// Load messages per channel
+const channels = {};
+const defaultChannels = ['general', 'gaming', 'tech'];
+
+defaultChannels.forEach(ch => {
+  const filePath = path.join(DATA_DIR, `${ch}.json`);
+  if (fs.existsSync(filePath)) {
+    const data = fs.readFileSync(filePath, 'utf8');
+    channels[ch] = JSON.parse(data || '[]');
+  } else {
+    channels[ch] = [];
+    fs.writeFileSync(filePath, '[]');
+  }
+});
+
+// Save messages for a channel
+function saveChannelMessages(channel) {
+  const filePath = path.join(DATA_DIR, `${channel}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(channels[channel], null, 2));
+}
+
+// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-let messages = [];
-
-try {
-  if (fs.existsSync(MESSAGES_FILE)) {
-    const data = fs.readFileSync(MESSAGES_FILE, 'utf8');
-    messages = JSON.parse(data || '[]');
-  } else {
-    fs.writeFileSync(MESSAGES_FILE, '[]');
-  }
-} catch (err) {
-  console.error('Error loading messages:', err);
-  messages = [];
-}
-
-function saveMessages() {
-  try {
-    fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2));
-    console.log('Messages saved');
-  } catch (err) {
-    console.error('Error saving messages:', err);
-  }
-}
-
-io.on('connection', (socket) => {
+io.on('connection', socket => {
   console.log('User connected:', socket.id);
 
-  socket.emit('load messages', messages);
+  let currentChannel = 'general';
+  socket.join(currentChannel);
+  socket.emit('load messages', channels[currentChannel]);
 
-  socket.on('chat message', (msg) => {
-    messages.push(msg);
+  // Switch channel
+  socket.on('switch channel', newChannel => {
+    if (!channels[newChannel]) {
+      channels[newChannel] = [];
+      saveChannelMessages(newChannel);
+    }
+    socket.leave(currentChannel);
+    currentChannel = newChannel;
+    socket.join(currentChannel);
+    socket.emit('load messages', channels[currentChannel]);
+  });
 
-    if (messages.length > 100) {
-      messages = messages.slice(-100);
+  // Receive chat message
+  socket.on('chat message', msg => {
+    if (!channels[currentChannel]) channels[currentChannel] = [];
+    channels[currentChannel].push(msg);
+
+    if (channels[currentChannel].length > 100) {
+      channels[currentChannel] = channels[currentChannel].slice(-100);
     }
 
-    saveMessages();
-    io.emit('chat message', msg);
+    saveChannelMessages(currentChannel);
+    io.to(currentChannel).emit('chat message', msg);
   });
 
   socket.on('disconnect', () => {
@@ -57,6 +75,4 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
