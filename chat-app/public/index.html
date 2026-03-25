@@ -1,91 +1,41 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>KoK</title>
-    <style>
-      body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #313338; color: #dcddde;}
-      #messages { list-style: none; padding: 0; }
-      #messages li { padding: 8px 12px; margin: 6px 0; background: #383a40; border-radius: 5px; }
-      .username { font-weight: bold; margin-right: 8px; color: #5865f2;}
-      .timestamp { font-size: 12px; color: #999; margin-left: 8px; }
-      #form { display: flex; gap: 10px; margin-top: 20px; }
-#input { 
-  flex: 1; padding: 10px; font-size: 16px;background: #383a40;  color: #dcddde; border: none;  border-radius: 5px; }
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chat App</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
 
-button { padding: 10px 20px; font-size: 16px; cursor: pointer;background: #5865f2; color: white;border: none;border-radius: 5px;}
-      #login { margin-bottom: 20px; display: flex; gap: 10px; }
-#login input { 
-  padding: 10px; 
-  font-size: 16px;
-  background: #383a40;
-  color: #dcddde;
-  border: none;
-  border-radius: 5px;
-}
-    </style>
-  </head>
-  <body>
-    <h1>💬 Chat App</h1>
+<div class="app">
 
-    <!-- Username entry -->
-    <div id="login">
-      <input id="username" type="text" placeholder="Enter your username..." />
-      <button onclick="setUsername()">Join</button>
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h2>Chat App</h2>
+    <div class="channels">
+      <div class="channel active"># general</div>
+    </div>
+  </div>
+
+  <!-- Main chat -->
+  <div class="chat-container">
+
+    <div class="chat-header">
+      # general
     </div>
 
-    <!-- Chat area (hidden until username is set) -->
-    <div id="chat" style="display:none">
-      <ul id="messages"></ul>
-      <div id="form">
-        <input id="input" type="text" placeholder="Type a message..." autocomplete="off" />
-        <button onclick="sendMessage()">Send</button>
-      </div>
-    </div>
+    <div id="messages" class="messages"></div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-      const socket = io();
-      let username = '';
+    <form id="form" class="input-area">
+      <input id="input" autocomplete="off" placeholder="Message #general" />
+      <button>Send</button>
+    </form>
 
-      function setUsername() {
-        const val = document.getElementById('username').value.trim();
-        if (!val) return;
-        username = val;
-        socket.emit('User Joined',username);
-        document.getElementById('login').style.display = 'none';
-        document.getElementById('chat').style.display = 'block';
-      }
+  </div>
 
-      function sendMessage() {
-        const input = document.getElementById('input');
-        if (input.value && username) {
-          socket.emit('chat message', {
-            username: username,
-            text: input.value,
-            time: new Date().toLocaleTimeString()
-          });
-          input.value = '';
-        }
-      }
+</div>
 
-      // Display incoming messages
-      socket.on('chat message', (msg) => {
-        const li = document.createElement('li');
-        li.innerHTML = `
-          <span class="username">${msg.username}</span>
-          ${msg.text}
-          <span class="timestamp">${msg.time}</span>
-        `;
-        document.getElementById('messages').appendChild(li);
-      });
-
-      document.getElementById('input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-      });
-
-      document.getElementById('username').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') setUsername();
-      });
-    </script>
-  </body>
+<script src="/socket.io/socket.io.js"></script>
+<script src="script.js"></script>
+</body>
 </html>

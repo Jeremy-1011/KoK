@@ -1,43 +1,33 @@
-const express = require('express');
-const http = require('http');
-const socketio = require('socket.io');
+const socket = io();
+const form = document.getElementById('form');
+const input = document.getElementById('input');
+const messages = document.getElementById('messages');
 
-const app = express();
-const server = http.createServer(app);
-const io = socketio(server);
+form.addEventListener('submit', function(e) {
+  e.preventDefault();
 
-app.use(express.static('public'));
+  if (input.value) {
+    const msg = {
+      username: username, // make sure you set this earlier
+      text: input.value,
+      time: new Date().toLocaleTimeString()
+    };
 
-// Now stores objects instead of strings
-const messages = [];
-
-io.on('connection', (socket) => {
-  console.log('A user connected');
-
-  // Send message history to new user
-  messages.forEach((msg) => {
     socket.emit('chat message', msg);
-  });
-
-socket.on('user joined', (username) => {
-  io.emit('chat message', {
-    username: 'system',
-    text: username + ' has joined the chat',
-    time: new Date().toLocaleTimeString()
-  })
-})
-
-  socket.on('chat message', (msg) => {
-    messages.push(msg);
-    io.emit('chat message', msg);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('A user disconnected');
-  });
+    input.value = '';
+  }
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+socket.on('chat message', function(msg) {
+  const item = document.createElement('div');
+  item.classList.add('message');
+
+  item.innerHTML = `
+    <span class="username">${msg.username}</span>
+    <span class="time">${msg.time}</span>
+    <div class="text">${msg.text}</div>
+  `;
+
+  messages.appendChild(item);
+  messages.scrollTop = messages.scrollHeight;
 });
