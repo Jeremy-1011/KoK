@@ -1,33 +1,31 @@
-const socket = io(server);
-const form = document.getElementById('form');
-const input = document.getElementById('input');
-const messages = document.getElementById('messages');
+const express = require('express');
+const http = require('http');
+const path = require('path');
+const { Server } = require('socket.io');
 
-form.addEventListener('submit', function(e) {
-  e.preventDefault();
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-  if (input.value) {
-    const msg = {
-      username: username, // make sure you set this earlier
-      text: input.value,
-      time: new Date().toLocaleTimeString()
-    };
+// Serve files from the "public" folder
+app.use(express.static(path.join(__dirname, 'public')));
 
-    socket.emit('chat message', msg);
-    input.value = '';
-  }
+// Socket connection
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  socket.on('chat message', (msg) => {
+    io.emit('chat message', msg);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+  });
 });
 
-socket.on('chat message', function(msg) {
-  const item = document.createElement('div');
-  item.classList.add('message');
+// Port for Railway
+const PORT = process.env.PORT || 3000;
 
-  item.innerHTML = `
-    <span class="username">${msg.username}</span>
-    <span class="time">${msg.time}</span>
-    <div class="text">${msg.text}</div>
-  `;
-
-  messages.appendChild(item);
-  messages.scrollTop = messages.scrollHeight;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
