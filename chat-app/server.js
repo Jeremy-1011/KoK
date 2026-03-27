@@ -11,24 +11,38 @@ const server = http.createServer(app);
 const io = socketio(server);
 
 app.use(express.json());
-
-// Ensure uploads folder exists
 fs.mkdirSync('uploads', { recursive: true });
 
-// In-memory store
-const channels = { general: [] };
+// ── In-memory store ───────────────────────────────────────────
+const channels = { general: [] };   // { channelName: [msg, ...] }
+const dms = {};                      // { "userA|userB": [msg, ...] }
+const onlineUsers = new Map();       // socketId -> { username, pfp }
+
+function dmKey(a, b) {
+  return [a, b].sort().join('|');
+}
 
 io.on('connection', (socket) => {
-  console.log('A user connected');
   let currentChannel = 'general';
+  let myUsername = null;
+  let myPfp = '/default-avatar.svg';
 
-  // Send channel list and message history on connect
-  socket.emit('init', {
-    channels: Object.keys(channels),
-    messages: channels[currentChannel] || []
+  // ── Register user ───────────────────────────────────────────
+  socket.on('register', ({ username, pfp }) => {
+    myUsername = username;
+    myPfp = pfp || '/default-avatar.svg';
+    onlineUsers.set(socket.id, { username, pfp: myPfp });
+    io.emit('online users', [...onlineUsers.values()]);
+
+    // Send init data
+    socket.emit('init', {
+      channels: Object.keys(channels),
+      messages: channels[currentChannel] || [],
+      onlineUsers: [...onlineUsers.values()]
+    });
   });
 
-  // Switch channel
+  // ── Channel switch ──────────────────────────────────────────
   socket.on('switch channel', (channel) => {
     if (channels[channel] !== undefined) {
       currentChannel = channel;
@@ -36,24 +50,76 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Chat message
+  // ── Channel message ─────────────────────────────────────────
   socket.on('chat message', (msg) => {
+    msg.id = Date.now() + '-' + Math.random().toString(36).slice(2);
+    msg.reactions = {};
     if (!channels[currentChannel]) channels[currentChannel] = [];
     channels[currentChannel].push(msg);
     io.emit('chat message', msg);
   });
 
-  // Typing indicators — broadcast to everyone else in the same channel
+  // ── DM ──────────────────────────────────────────────────────
+  socket.on('dm', ({ to, msg }) => {
+    const key = dmKey(myUsername, to);
+    if (!dms[key]) dms[key] = [];
+    msg.id = Date.now() + '-' + Math.random().toString(36).slice(2);
+    msg.reactions = {};
+    dms[key].push(msg);
+
+    // Send to both sender and recipient
+    socket.emit('dm message', { from: myUsername, to, msg });
+    // Find recipient socket
+    for (const [sid, u] of onlineUsers) {
+      if (u.username === to) {
+        io.to(sid).emit('dm message', { from: myUsername, to, msg });
+        break;
+      }
+    }
+  });
+
+  // ── Load DM history ─────────────────────────────────────────
+  socket.on('open dm', (otherUser) => {
+    const key = dmKey(myUsername, otherUser);
+    socket.emit('load dm', { with: otherUser, messages: dms[key] || [] });
+  });
+
+  // ── Reactions ───────────────────────────────────────────────
+  socket.on('react', ({ msgId, emoji, channel, isDm, dmWith }) => {
+    let msg;
+    if (isDm) {
+      const key = dmKey(myUsername, dmWith);
+      msg = (dms[key] || []).find(m => m.id === msgId);
+    } else {
+      msg = (channels[channel] || []).find(m => m.id === msgId);
+    }
+    if (!msg) return;
+    if (!msg.reactions[emoji]) msg.reactions[emoji] = new Set();
+    if (msg.reactions[emoji].has(myUsername)) {
+      msg.reactions[emoji].delete(myUsername);
+    } else {
+      msg.reactions[emoji].add(myUsername);
+    }
+    // Serialize sets to arrays for JSON
+    const serialized = {};
+    for (const [e, users] of Object.entries(msg.reactions)) {
+      serialized[e] = [...users];
+    }
+    io.emit('reaction update', { msgId, reactions: serialized });
+  });
+
+  // ── Typing ──────────────────────────────────────────────────
   socket.on('typing', ({ username, channel }) => {
     socket.broadcast.emit('typing', { username, channel });
   });
-
   socket.on('stop typing', ({ username, channel }) => {
     socket.broadcast.emit('stop typing', { username, channel });
   });
 
+  // ── Disconnect ──────────────────────────────────────────────
   socket.on('disconnect', () => {
-    console.log('A user disconnected');
+    onlineUsers.delete(socket.id);
+    io.emit('online users', [...onlineUsers.values()]);
   });
 });
 
@@ -65,61 +131,46 @@ const storage = multer.diskStorage({
     cb(null, unique + path.extname(file.originalname));
   }
 });
-
-// Images only (for profile pictures)
 const imageFilter = (req, file, cb) => {
-  const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Images only'), false);
+  ['image/jpeg','image/png','image/gif','image/webp'].includes(file.mimetype)
+    ? cb(null, true) : cb(new Error('Images only'), false);
 };
-
-// Any allowed file type (for chat attachments)
 const attachmentFilter = (req, file, cb) => {
-  const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp',
-                   'application/pdf', 'text/plain', 'application/zip'];
-  allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('File type not allowed'), false);
+  ['image/jpeg','image/png','image/gif','image/webp','application/pdf','text/plain','application/zip']
+    .includes(file.mimetype) ? cb(null, true) : cb(new Error('File type not allowed'), false);
 };
-
-const uploadImage = multer({ storage, fileFilter: imageFilter, limits: { fileSize: 5 * 1024 * 1024 } });
-const uploadAny   = multer({ storage, fileFilter: attachmentFilter, limits: { fileSize: 20 * 1024 * 1024 } });
+const uploadImage = multer({ storage, fileFilter: imageFilter, limits: { fileSize: 5*1024*1024 } });
+const uploadAny   = multer({ storage, fileFilter: attachmentFilter, limits: { fileSize: 20*1024*1024 } });
 
 // ── Static ────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static('uploads'));
 
 // ── Routes ────────────────────────────────────────────────────
-
-// Profile picture upload
 app.post('/upload', uploadImage.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
   res.json({ path: `/uploads/${req.file.filename}` });
 });
-
-// Chat file/image attachment upload
 app.post('/upload-any', uploadAny.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
   res.json({ path: `/uploads/${req.file.filename}`, name: req.file.originalname });
 });
-
-// Add / delete channels
 app.post('/channel', (req, res) => {
   const { action, channel } = req.body;
   const name = channel?.trim().toLowerCase().replace(/\s+/g, '-');
   if (!name) return res.status(400).json({ error: 'Invalid channel name' });
-
   if (action === 'add') {
     if (channels[name]) return res.status(400).json({ error: 'Channel already exists' });
     channels[name] = [];
     io.emit('channel added', name);
     return res.json({ ok: true });
   }
-
   if (action === 'delete') {
     if (name === 'general') return res.status(400).json({ error: 'Cannot delete #general' });
     delete channels[name];
     io.emit('channel deleted', name);
     return res.json({ ok: true });
   }
-
   res.status(400).json({ error: 'Unknown action' });
 });
 

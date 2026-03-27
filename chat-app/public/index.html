@@ -2,27 +2,46 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Discord-like Chat</title>
+<title>KoK Chat</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="app">
 
+  <!-- Left sidebar -->
   <div class="sidebar">
-    <h2>Chat App</h2>
-    <div id="channels" class="channels">
-      <div class="channel active" data-channel="general"># general</div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">CHANNELS</div>
+      <div id="channels" class="nav-list">
+        <div class="channel nav-item active" data-channel="general"># general</div>
+      </div>
+      <div class="sidebar-actions">
+        <button id="addChannel">+ Add</button>
+        <button id="deleteChannel" class="danger">🗑 Delete</button>
+      </div>
     </div>
-    <button id="addChannel">Add Channel</button>
-    <button id="deleteChannel">Delete Channel</button>
-    <label class="pfp-label" title="Set profile picture">
-      🖼 Set Avatar
-      <input type="file" id="pfpInput" accept="image/*" />
-    </label>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">DIRECT MESSAGES</div>
+      <div id="dm-list" class="nav-list"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">ONLINE — <span id="online-count">0</span></div>
+      <div id="online-list" class="nav-list online-list"></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <label class="pfp-label" title="Set profile picture">
+        🖼 Set Avatar
+        <input type="file" id="pfpInput" accept="image/*" />
+      </label>
+    </div>
   </div>
 
+  <!-- Main chat area -->
   <div class="chat-container">
-    <div class="chat-header"># general</div>
+    <div class="chat-header" id="chat-header"># general</div>
     <div id="messages" class="messages"></div>
     <div id="typing-indicator" class="typing-indicator"></div>
     <div class="input-area">
@@ -41,6 +60,16 @@
     </div>
   </div>
 
+</div>
+
+<!-- Emoji reaction picker -->
+<div id="emoji-picker" class="emoji-picker hidden">
+  <span class="emoji-opt" data-emoji="👍">👍</span>
+  <span class="emoji-opt" data-emoji="❤️">❤️</span>
+  <span class="emoji-opt" data-emoji="😂">😂</span>
+  <span class="emoji-opt" data-emoji="😮">😮</span>
+  <span class="emoji-opt" data-emoji="😢">😢</span>
+  <span class="emoji-opt" data-emoji="🔥">🔥</span>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
