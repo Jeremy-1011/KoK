@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>KoK Chat — Login</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #36393f; color: #dcddde; display: flex; align-items: center; justify-content: center; height: 100vh; }
+  .card { background: #2f3136; border-radius: 12px; padding: 40px 36px; width: 100%; max-width: 420px; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+  .logo { text-align: center; font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: #8e9297; font-size: 14px; margin-bottom: 28px; }
+  .tabs { display: flex; border-radius: 6px; overflow: hidden; margin-bottom: 24px; border: 1px solid #40444b; }
+  .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; font-size: 14px; font-weight: 600; color: #8e9297; background: #2f3136; transition: all .15s; }
+  .tab.active { background: #5865f2; color: #fff; }
+  label { display: block; font-size: 12px; font-weight: 700; color: #8e9297; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 6px; }
+  input { width: 100%; padding: 10px 14px; border-radius: 6px; border: 1px solid #40444b; background: #202225; color: #fff; font-size: 15px; margin-bottom: 16px; outline: none; }
+  input:focus { border-color: #5865f2; }
+  .btn { width: 100%; padding: 12px; border-radius: 6px; border: none; background: #5865f2; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; transition: background .15s; }
+  .btn:hover { background: #4752c4; }
+  .error { background: #3d1c1c; color: #f28b82; border-radius: 6px; padding: 10px 14px; font-size: 13px; margin-bottom: 14px; display: none; }
+  .success { background: #1c3d24; color: #81c784; border-radius: 6px; padding: 10px 14px; font-size: 13px; margin-bottom: 14px; display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">💬 KoK Chat</div>
+  <div class="subtitle">Sign in to continue</div>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-login" onclick="switchTab('login')">Login</div>
+    <div class="tab" id="tab-register" onclick="switchTab('register')">Register</div>
+  </div>
+
+  <div id="msg-error" class="error"></div>
+  <div id="msg-success" class="success"></div>
+
+  <!-- Login form -->
+  <div id="form-login">
+    <label>Username</label>
+    <input type="text" id="login-username" placeholder="Enter username" autocomplete="username" />
+    <label>Password</label>
+    <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password" />
+    <button class="btn" onclick="login()">Log In</button>
+  </div>
+
+  <!-- Register form -->
+  <div id="form-register" style="display:none">
+    <label>Username</label>
+    <input type="text" id="reg-username" placeholder="Choose a username" autocomplete="username" />
+    <label>Password</label>
+    <input type="password" id="reg-password" placeholder="Choose a password (min 6 chars)" autocomplete="new-password" />
+    <label>Confirm Password</label>
+    <input type="password" id="reg-confirm" placeholder="Confirm password" autocomplete="new-password" />
+    <button class="btn" onclick="register()">Create Account</button>
+  </div>
+</div>
+
+<script>
+  // If already logged in, go straight to chat
+  if (localStorage.getItem('kok_token')) window.location.href = '/';
+
+  function switchTab(tab) {
+    document.getElementById('form-login').style.display    = tab === 'login'    ? '' : 'none';
+    document.getElementById('form-register').style.display = tab === 'register' ? '' : 'none';
+    document.getElementById('tab-login').classList.toggle('active',    tab === 'login');
+    document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+    hideMsg();
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('msg-error');
+    el.textContent = msg;
+    el.style.display = 'block';
+    document.getElementById('msg-success').style.display = 'none';
+  }
+  function showSuccess(msg) {
+    const el = document.getElementById('msg-success');
+    el.textContent = msg;
+    el.style.display = 'block';
+    document.getElementById('msg-error').style.display = 'none';
+  }
+  function hideMsg() {
+    document.getElementById('msg-error').style.display = 'none';
+    document.getElementById('msg-success').style.display = 'none';
+  }
+
+  async function login() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    if (!username || !password) return showError('Please fill in all fields');
+    const res  = await fetch('/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username, password }) });
+    const data = await res.json();
+    if (data.error) return showError(data.error);
+    localStorage.setItem('kok_token',    data.token);
+    localStorage.setItem('kok_username', data.username);
+    localStorage.setItem('kok_pfp',      data.pfp || '/default-avatar.svg');
+    window.location.href = '/';
+  }
+
+  async function register() {
+    const username = document.getElementById('reg-username').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const confirm  = document.getElementById('reg-confirm').value;
+    if (!username || !password) return showError('Please fill in all fields');
+    if (password !== confirm)   return showError('Passwords do not match');
+    const res  = await fetch('/auth/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ username, password }) });
+    const data = await res.json();
+    if (data.error) return showError(data.error);
+    localStorage.setItem('kok_token',    data.token);
+    localStorage.setItem('kok_username', data.username);
+    localStorage.setItem('kok_pfp',      data.pfp || '/default-avatar.svg');
+    showSuccess('Account created! Taking you to chat…');
+    setTimeout(() => window.location.href = '/', 800);
+  }
+
+  // Enter key support
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    if (document.getElementById('form-login').style.display !== 'none') login();
+    else register();
+  });
+</script>
+</body>
+</html>

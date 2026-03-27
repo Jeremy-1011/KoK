@@ -1,3 +1,9 @@
+// ── Auth guard ────────────────────────────────────────────────
+const token    = localStorage.getItem('kok_token');
+const username = localStorage.getItem('kok_username');
+const storedPfp = localStorage.getItem('kok_pfp');
+if (!token || !username) window.location.href = '/login.html';
+
 const socket = io();
 
 // ── DOM refs ──────────────────────────────────────────────────
@@ -18,19 +24,22 @@ const typingIndicator   = document.getElementById('typing-indicator');
 const emojiPicker       = document.getElementById('emoji-picker');
 
 // ── State ─────────────────────────────────────────────────────
-let username       = prompt('Enter your username') || 'Anonymous';
-let pfp            = '/default-avatar.svg';
+let pfp            = storedPfp || '/default-avatar.svg';
 let currentChannel = 'general';
-let currentDm      = null;   // username of DM partner, or null
+let currentDm      = null;
 let pendingFile    = null;
 let activeReactMsgId = null;
 let activeReactIsDm  = false;
 const typingUsers  = new Set();
 let typingTimeout;
-const unreadDms    = {};     // { username: count }
+const unreadDms    = {};
 
 // ── Register with server ──────────────────────────────────────
 socket.emit('register', { username, pfp });
+
+// Populate user info bar
+document.getElementById('my-username').textContent = username;
+document.getElementById('my-pfp').src = pfp;
 
 // ── Profile picture ───────────────────────────────────────────
 pfpInput.addEventListener('change', async e => {
@@ -42,10 +51,22 @@ pfpInput.addEventListener('change', async e => {
   const data = await res.json();
   if (data.path) {
     pfp = data.path;
-    // Re-register so the server updates the online users list with the new pfp
+    localStorage.setItem('kok_pfp', pfp);
+    await fetch('/auth/pfp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-session-token': token },
+      body: JSON.stringify({ pfp })
+    });
     socket.emit('register', { username, pfp });
   }
 });
+
+function logout() {
+  localStorage.removeItem('kok_token');
+  localStorage.removeItem('kok_username');
+  localStorage.removeItem('kok_pfp');
+  window.location.href = '/login.html';
+}
 
 // ── File attachment ───────────────────────────────────────────
 fileInput.addEventListener('change', e => {
@@ -110,11 +131,16 @@ function addMessage(msg, isDm = false) {
 function updateReactions(msgId, reactions) {
   const msgEl = messagesEl.querySelector(`[data-msgid="${msgId}"]`);
   if (!msgEl) return;
-  const existing = msgEl.querySelector('.reactions');
+  const content = msgEl.querySelector('.message-content');
+  const existing = content.querySelector('.reactions');
   const isDm = msgEl.querySelector('.react-btn')?.dataset.isdm === 'true';
   const html = buildReactionsHTML(reactions, msgId, isDm);
-  if (existing) existing.outerHTML = html;
-  else msgEl.querySelector('.message-content').insertAdjacentHTML('beforeend', html);
+  if (existing) {
+    existing.remove();
+  }
+  if (html) {
+    content.insertAdjacentHTML('beforeend', html);
+  }
 }
 
 // ── Socket events ─────────────────────────────────────────────
@@ -268,18 +294,25 @@ messagesEl.addEventListener('click', e => {
   // React button
   const reactBtn = e.target.closest('.react-btn');
   if (reactBtn) {
+    e.stopPropagation();
     activeReactMsgId = reactBtn.dataset.msgid;
     activeReactIsDm  = reactBtn.dataset.isdm === 'true';
     const rect = reactBtn.getBoundingClientRect();
-    emojiPicker.style.top  = (rect.top - 52) + 'px';
-    emojiPicker.style.left = rect.left + 'px';
+    // Position above the button, clamped to viewport
+    const pickerH = 48, pickerW = 220;
+    let top  = rect.top - pickerH - 6;
+    let left = rect.left;
+    if (top < 4) top = rect.bottom + 6;
+    if (left + pickerW > window.innerWidth - 4) left = window.innerWidth - pickerW - 4;
+    emojiPicker.style.top  = top + 'px';
+    emojiPicker.style.left = left + 'px';
     emojiPicker.classList.remove('hidden');
-    e.stopPropagation();
     return;
   }
   // Reaction pill toggle
   const pill = e.target.closest('.reaction-pill');
   if (pill) {
+    e.stopPropagation();
     socket.emit('react', {
       msgId:   pill.dataset.msgid,
       emoji:   pill.dataset.emoji,
@@ -292,6 +325,7 @@ messagesEl.addEventListener('click', e => {
 });
 
 emojiPicker.addEventListener('click', e => {
+  e.stopPropagation();
   const opt = e.target.closest('.emoji-opt');
   if (!opt || !activeReactMsgId) return;
   socket.emit('react', {
@@ -302,9 +336,13 @@ emojiPicker.addEventListener('click', e => {
     dmWith:  currentDm
   });
   emojiPicker.classList.add('hidden');
+  activeReactMsgId = null;
 });
 
-document.addEventListener('click', () => emojiPicker.classList.add('hidden'));
+document.addEventListener('click', () => {
+  emojiPicker.classList.add('hidden');
+  activeReactMsgId = null;
+});
 
 // ── Channel management ────────────────────────────────────────
 channelContainer.addEventListener('click', e => {
