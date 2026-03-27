@@ -15,16 +15,30 @@
     </div>
     <button id="addChannel">Add Channel</button>
     <button id="deleteChannel">Delete Channel</button>
-    <input type="file" id="pfpInput" />
+    <label class="pfp-label" title="Set profile picture">
+      🖼 Set Avatar
+      <input type="file" id="pfpInput" accept="image/*" />
+    </label>
   </div>
 
   <div class="chat-container">
     <div class="chat-header"># general</div>
     <div id="messages" class="messages"></div>
-    <form id="form" class="input-area">
-      <input id="input" autocomplete="off" placeholder="Message #general" />
-      <button>Send</button>
-    </form>
+    <div id="typing-indicator" class="typing-indicator"></div>
+    <div class="input-area">
+      <label class="attach-btn" title="Attach file">
+        📎
+        <input type="file" id="fileInput" accept="image/*,.pdf,.txt,.zip" />
+      </label>
+      <div id="file-preview" class="file-preview hidden">
+        <span id="file-preview-name"></span>
+        <button type="button" id="clearFile">✕</button>
+      </div>
+      <form id="form">
+        <input id="input" autocomplete="off" placeholder="Message #general" />
+        <button>Send</button>
+      </form>
+    </div>
   </div>
 
 </div>

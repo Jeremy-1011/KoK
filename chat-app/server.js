@@ -10,17 +10,16 @@ const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 const io = socketio(server);
 
+app.use(express.json());
+
 // Ensure uploads folder exists
 fs.mkdirSync('uploads', { recursive: true });
-
-app.use(express.json());
 
 // In-memory store
 const channels = { general: [] };
 
 io.on('connection', (socket) => {
   console.log('A user connected');
-
   let currentChannel = 'general';
 
   // Send channel list and message history on connect
@@ -44,41 +43,61 @@ io.on('connection', (socket) => {
     io.emit('chat message', msg);
   });
 
-  // Disconnect
+  // Typing indicators — broadcast to everyone else in the same channel
+  socket.on('typing', ({ username, channel }) => {
+    socket.broadcast.emit('typing', { username, channel });
+  });
+
+  socket.on('stop typing', ({ username, channel }) => {
+    socket.broadcast.emit('stop typing', { username, channel });
+  });
+
   socket.on('disconnect', () => {
     console.log('A user disconnected');
   });
 });
 
-// Storage configuration
+// ── Storage ───────────────────────────────────────────────────
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+  destination: (req, file, cb) => cb(null, 'uploads/'),
+  filename: (req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, unique + path.extname(file.originalname));
   }
 });
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file type'), false);
-  }
+// Images only (for profile pictures)
+const imageFilter = (req, file, cb) => {
+  const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Images only'), false);
 };
 
-const upload = multer({ storage, fileFilter });
+// Any allowed file type (for chat attachments)
+const attachmentFilter = (req, file, cb) => {
+  const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp',
+                   'application/pdf', 'text/plain', 'application/zip'];
+  allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('File type not allowed'), false);
+};
 
-// Serve frontend
+const uploadImage = multer({ storage, fileFilter: imageFilter, limits: { fileSize: 5 * 1024 * 1024 } });
+const uploadAny   = multer({ storage, fileFilter: attachmentFilter, limits: { fileSize: 20 * 1024 * 1024 } });
+
+// ── Static ────────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static('uploads'));
 
-// Upload profile picture — returns JSON so script.js can parse it
-app.post('/upload', upload.single('file'), (req, res) => {
+// ── Routes ────────────────────────────────────────────────────
+
+// Profile picture upload
+app.post('/upload', uploadImage.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
   res.json({ path: `/uploads/${req.file.filename}` });
+});
+
+// Chat file/image attachment upload
+app.post('/upload-any', uploadAny.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+  res.json({ path: `/uploads/${req.file.filename}`, name: req.file.originalname });
 });
 
 // Add / delete channels
@@ -103,8 +122,5 @@ app.post('/channel', (req, res) => {
 
   res.status(400).json({ error: 'Unknown action' });
 });
-
-// Serve uploaded files
-app.use('/uploads', express.static('uploads'));
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
