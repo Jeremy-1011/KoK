@@ -4,10 +4,10 @@ const socketio = require('socket.io');
 const path = require('path');
 const http = require('http');
 
-const app = express();          // 1. create app first
+const app = express();
 const PORT = process.env.PORT || 3000;
-const server = http.createServer(app);  // 2. then use app
-const io = socketio(server);           // 3. then attach socket.io
+const server = http.createServer(app);
+const io = socketio(server);
 
 const messages = [];
 
@@ -34,8 +34,8 @@ io.on('connection', (socket) => {
     io.emit('chat message', msg);
   });
 
-  // 4. listen for disconnect
-  socket.on('disconnected', () => {
+  // 4. listen for disconnect (fixed: was 'disconnected')
+  socket.on('disconnect', () => {
     console.log('A user disconnected');
   });
 });
@@ -43,16 +43,15 @@ io.on('connection', (socket) => {
 // Storage configuration
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/'); // folder where files will be stored
+    cb(null, 'uploads/');
   },
   filename: function (req, file, cb) {
-    // use original name + timestamp to avoid conflicts
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, uniqueSuffix + path.extname(file.originalname));
   }
 });
 
-// File filter example (optional)
+// File filter
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
   if (allowedTypes.includes(file.mimetype)) {
@@ -64,6 +63,9 @@ const fileFilter = (req, file, cb) => {
 
 // Create Multer instance
 const upload = multer({ storage, fileFilter });
+
+// Serve frontend from /public folder
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Routes
 app.post('/upload', upload.single('file'), (req, res) => {
