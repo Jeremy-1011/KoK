@@ -5,11 +5,13 @@ const path     = require('path');
 const http     = require('http');
 const fs       = require('fs');
 const bcrypt   = require('bcryptjs');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app    = express();
 const PORT   = process.env.PORT || 3000;
 const server = http.createServer(app);
 const io     = socketio(server);
+const genAI  = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.use(express.json());
 fs.mkdirSync('uploads', { recursive: true });
@@ -18,6 +20,7 @@ fs.mkdirSync('uploads', { recursive: true });
 // Set these as Railway environment variables:
 //   ADMIN_PASSWORD  → your secret admin page password
 //   SESSION_SECRET  → any long random string
+//   GEMINI_API_KEY  → your Google Gemini API key
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme123';
 const ACCOUNTS_FILE  = path.join(__dirname, 'data', 'accounts.json');
 
@@ -33,7 +36,7 @@ function saveAccounts(accounts) {
 }
 
 // ── Simple session store (in-memory token → username) ─────────
-const sessions = new Map(); // token → username
+const sessions = new Map();
 function makeToken() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -47,9 +50,9 @@ function requireAuth(req, res, next) {
 }
 
 // ── Chat store ────────────────────────────────────────────────
-const channels   = { general: [] };
-const dms        = {};
-const onlineUsers = new Map(); // socketId → { username, pfp }
+const channels    = { general: [] };
+const dms         = {};
+const onlineUsers = new Map();
 
 function dmKey(a, b) { return [a, b].sort().join('|'); }
 
@@ -80,12 +83,35 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('chat message', (msg) => {
+  socket.on('chat message', async (msg) => {
     msg.id        = Date.now() + '-' + Math.random().toString(36).slice(2);
     msg.reactions = {};
     if (!channels[currentChannel]) channels[currentChannel] = [];
     channels[currentChannel].push(msg);
     io.emit('chat message', msg);
+
+    // AI bot — triggers when message contains @AI
+    if (msg.text && msg.text.includes('@AI')) {
+      try {
+        const model  = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const prompt = msg.text.replace('@AI', '').trim();
+        const result = await model.generateContent(prompt);
+        const text   = result.response.text();
+
+        const botMsg = {
+          id:        Date.now() + '-bot',
+          username:  'AI',
+          pfp:       '/default-avatar.svg',
+          text,
+          reactions: {}
+        };
+
+        channels[currentChannel].push(botMsg);
+        io.emit('chat message', botMsg);
+      } catch (err) {
+        console.error('AI error:', err.message);
+      }
+    }
   });
 
   socket.on('dm', ({ to, msg }) => {
@@ -133,8 +159,6 @@ io.on('connection', (socket) => {
 });
 
 // ── Auth routes ───────────────────────────────────────────────
-
-// Register a new account
 app.post('/auth/register', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
@@ -158,7 +182,6 @@ app.post('/auth/register', async (req, res) => {
   res.json({ token, username, pfp: accounts[key].pfp });
 });
 
-// Login
 app.post('/auth/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
@@ -175,7 +198,6 @@ app.post('/auth/login', async (req, res) => {
   res.json({ token, username: account.username, pfp: account.pfp });
 });
 
-// Update pfp (requires auth)
 app.post('/auth/pfp', requireAuth, (req, res) => {
   const { pfp } = req.body;
   const accounts = loadAccounts();
@@ -205,7 +227,6 @@ app.get('/admin', (req, res) => {
     .accounts { margin-top: 20px; }
     .account-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #2f3136; border-radius: 6px; margin-bottom: 6px; }
     .del-btn { background: #ed4245; color: white; border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
-    #login-section, #admin-section { display: block; }
   </style>
 </head>
 <body>
@@ -284,7 +305,6 @@ app.get('/admin', (req, res) => {
 </html>`);
 });
 
-// Admin API middleware
 function requireAdmin(req, res, next) {
   if (req.headers['x-admin-key'] !== ADMIN_PASSWORD)
     return res.status(401).json({ error: 'Unauthorized' });
@@ -326,7 +346,7 @@ const uploadAny   = multer({ storage, fileFilter: attachmentFilter, limits: { fi
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static('uploads'));
 
-app.post('/upload',     uploadImage.single('file'), (req, res) => {
+app.post('/upload', uploadImage.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
   res.json({ path: `/uploads/${req.file.filename}` });
 });
@@ -334,6 +354,7 @@ app.post('/upload-any', uploadAny.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
   res.json({ path: `/uploads/${req.file.filename}`, name: req.file.originalname });
 });
+
 app.post('/channel', (req, res) => {
   const { action, channel } = req.body;
   const name = channel?.trim().toLowerCase().replace(/\s+/g, '-');
