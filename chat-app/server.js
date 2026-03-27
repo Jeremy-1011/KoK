@@ -9,32 +9,38 @@ const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 const io = socketio(server);
 
-const messages = [];
+app.use(express.json());
+
+// In-memory store
+const channels = { general: [] };
 
 io.on('connection', (socket) => {
   console.log('A user connected');
 
-  // 1. send message history to new user
-  messages.forEach((msg) => {
-    socket.emit('chat message', msg);
+  let currentChannel = 'general';
+
+  // Send channel list and message history on connect
+  socket.emit('init', {
+    channels: Object.keys(channels),
+    messages: channels[currentChannel] || []
   });
 
-  // 2. listen for a user joining
-  socket.on('user joined', (username) => {
-    io.emit('chat message', {
-      username: '⚡ System',
-      text: username + ' has joined the chat',
-      time: new Date().toLocaleTimeString()
-    });
+  // Switch channel
+  socket.on('switch channel', (channel) => {
+    if (channels[channel] !== undefined) {
+      currentChannel = channel;
+      socket.emit('load messages', channels[channel]);
+    }
   });
 
-  // 3. listen for a chat message
+  // Chat message
   socket.on('chat message', (msg) => {
-    messages.push(msg);
+    if (!channels[currentChannel]) channels[currentChannel] = [];
+    channels[currentChannel].push(msg);
     io.emit('chat message', msg);
   });
 
-  // 4. listen for disconnect (fixed: was 'disconnected')
+  // Disconnect
   socket.on('disconnect', () => {
     console.log('A user disconnected');
   });
@@ -51,7 +57,6 @@ const storage = multer.diskStorage({
   }
 });
 
-// File filter
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
   if (allowedTypes.includes(file.mimetype)) {
@@ -61,19 +66,41 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Create Multer instance
 const upload = multer({ storage, fileFilter });
 
-// Serve frontend from /public folder
+// Serve frontend
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Routes
+// Upload profile picture — returns JSON so script.js can parse it
 app.post('/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).send('No file uploaded.');
-  res.send(`File uploaded successfully: ${req.file.filename}`);
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+  res.json({ path: `/uploads/${req.file.filename}` });
 });
 
-// Serve uploaded files statically
+// Add / delete channels
+app.post('/channel', (req, res) => {
+  const { action, channel } = req.body;
+  const name = channel?.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!name) return res.status(400).json({ error: 'Invalid channel name' });
+
+  if (action === 'add') {
+    if (channels[name]) return res.status(400).json({ error: 'Channel already exists' });
+    channels[name] = [];
+    io.emit('channel added', name);
+    return res.json({ ok: true });
+  }
+
+  if (action === 'delete') {
+    if (name === 'general') return res.status(400).json({ error: 'Cannot delete #general' });
+    delete channels[name];
+    io.emit('channel deleted', name);
+    return res.json({ ok: true });
+  }
+
+  res.status(400).json({ error: 'Unknown action' });
+});
+
+// Serve uploaded files
 app.use('/uploads', express.static('uploads'));
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
