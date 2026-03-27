@@ -28,18 +28,23 @@ io.on('connection', (socket) => {
   let myPfp = '/default-avatar.svg';
 
   // ── Register user ───────────────────────────────────────────
+  let registered = false;
+
   socket.on('register', ({ username, pfp }) => {
     myUsername = username;
     myPfp = pfp || '/default-avatar.svg';
     onlineUsers.set(socket.id, { username, pfp: myPfp });
     io.emit('online users', [...onlineUsers.values()]);
 
-    // Send init data
-    socket.emit('init', {
-      channels: Object.keys(channels),
-      messages: channels[currentChannel] || [],
-      onlineUsers: [...onlineUsers.values()]
-    });
+    // Send full init only on first connect, not on pfp update re-registers
+    if (!registered) {
+      registered = true;
+      socket.emit('init', {
+        channels: Object.keys(channels),
+        messages: channels[currentChannel] || [],
+        onlineUsers: [...onlineUsers.values()]
+      });
+    }
   });
 
   // ── Channel switch ──────────────────────────────────────────

@@ -40,7 +40,11 @@ pfpInput.addEventListener('change', async e => {
   fd.append('file', file);
   const res  = await fetch('/upload', { method: 'POST', body: fd });
   const data = await res.json();
-  if (data.path) pfp = data.path;
+  if (data.path) {
+    pfp = data.path;
+    // Re-register so the server updates the online users list with the new pfp
+    socket.emit('register', { username, pfp });
+  }
 });
 
 // ── File attachment ───────────────────────────────────────────
@@ -237,7 +241,6 @@ form.addEventListener('submit', async e => {
 
   if (currentDm) {
     socket.emit('dm', { to: currentDm, msg });
-    addMessage({ ...msg, reactions: {} }, true);
   } else {
     socket.emit('chat message', msg);
   }
