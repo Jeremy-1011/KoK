@@ -1,9 +1,44 @@
 const express = require('express');
 const multer = require('multer');
+const socketio = require('socket.io');
 const path = require('path');
+const http = require('http');
 
-const app = express();
+const app = express();          // 1. create app first
 const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);  // 2. then use app
+const io = socketio(server);           // 3. then attach socket.io
+
+const messages = [];
+
+io.on('connection', (socket) => {
+  console.log('A user connected');
+
+  // 1. send message history to new user
+  messages.forEach((msg) => {
+    socket.emit('chat message', msg);
+  });
+
+  // 2. listen for a user joining
+  socket.on('user joined', (username) => {
+    io.emit('chat message', {
+      username: '⚡ System',
+      text: username + ' has joined the chat',
+      time: new Date().toLocaleTimeString()
+    });
+  });
+
+  // 3. listen for a chat message
+  socket.on('chat message', (msg) => {
+    messages.push(msg);
+    io.emit('chat message', msg);
+  });
+
+  // 4. listen for disconnect
+  socket.on('disconnected', () => {
+    console.log('A user disconnected');
+  });
+});
 
 // Storage configuration
 const storage = multer.diskStorage({
@@ -39,4 +74,4 @@ app.post('/upload', upload.single('file'), (req, res) => {
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
