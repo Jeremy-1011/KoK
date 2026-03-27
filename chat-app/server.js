@@ -93,7 +93,7 @@ io.on('connection', (socket) => {
     // AI bot — triggers when message contains @AI
     if (msg.text && msg.text.includes('@AI')) {
       try {
-        const model  = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model  = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
         const prompt = msg.text.replace('@AI', '').trim();
         const result = await model.generateContent(prompt);
         const text   = result.response.text();
