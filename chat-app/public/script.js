@@ -7,7 +7,7 @@ const chatHeader = document.querySelector('.chat-header');
 const pfpInput = document.getElementById('pfpInput');
 
 let username = prompt('Enter your username') || 'Anonymous';
-let pfp = '/default-avatar.png';
+let pfp = '/default-avatar.svg';
 let currentChannel = 'general';
 
 // Upload profile picture
@@ -36,7 +36,7 @@ function addMessage(msg) {
   }
 
   item.innerHTML = `
-    <img class="pfp" src="${msg.pfp || '/default-avatar.png'}" onerror="this.src='/default-avatar.png'" />
+    <img class="pfp" src="${msg.pfp || '/default-avatar.svg'}" onerror="this.src='/default-avatar.svg'" />
     <div class="message-content">
       <span class="username">${msg.username}</span>
       <span class="time">${msg.time}</span>

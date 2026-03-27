@@ -3,11 +3,15 @@ const multer = require('multer');
 const socketio = require('socket.io');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 const io = socketio(server);
+
+// Ensure uploads folder exists
+fs.mkdirSync('uploads', { recursive: true });
 
 app.use(express.json());
 
